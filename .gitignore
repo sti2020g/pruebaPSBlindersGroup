@@ -1,0 +1,15 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# PrestaShop cache/generated
+var/cache/
+var/logs/
+
+# PHP
+*.log
