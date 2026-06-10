@@ -13,8 +13,9 @@ function productBadgesInit() {
         if (!badges || badges.length === 0) { return; }
         if (maxB > 0) { badges = badges.slice(0, maxB); }
 
-        // Target the image container inside the article card
-        var imgTarget = article.querySelector('.card-img-top')
+        // Target the <a> that directly wraps the image — exactly image-sized on all viewports
+        var imgTarget = article.querySelector('a.product-thumbnail, a.thumbnail.product-thumbnail')
+                     || article.querySelector('.card-img-top')
                      || article;
         imgTarget.style.position = 'relative';
         imgTarget.appendChild(buildWrapper(badges));
