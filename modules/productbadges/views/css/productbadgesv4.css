@@ -48,3 +48,10 @@
     margin: 0;
 }
 
+/* ── Badge — listing cards (smaller images) ────────────────────────────── */
+.product-miniature .productbadges-badge {
+    padding: 3px 8px;
+    font-size: 10px;
+    letter-spacing: 0.3px;
+}
+
