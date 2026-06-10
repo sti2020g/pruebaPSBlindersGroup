@@ -1,0 +1,9 @@
+/* Product Badges - back-office admin styles */
+.productbadges-preview {
+    display: inline-block;
+    padding: 3px 10px;
+    font-size: 12px;
+    font-weight: 700;
+    border-radius: 2px;
+    text-transform: uppercase;
+}

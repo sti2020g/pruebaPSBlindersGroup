@@ -13,3 +13,6 @@ var/logs/
 
 # PHP
 *.log
+
+# Build artifacts
+*.zip
