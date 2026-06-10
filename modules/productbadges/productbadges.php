@@ -125,6 +125,7 @@ class ProductBadges extends Module
         Configuration::updateValue('PRODUCTBADGES_SHOW_LISTING', 1);
         Configuration::updateValue('PRODUCTBADGES_SHOW_PRODUCT', 1);
         Configuration::updateValue('PRODUCTBADGES_MAX_BADGES', 3);
+        Configuration::updateValue('PRODUCTBADGES_HIDE_FLAGS', 1);
     }
 
     private function deleteConfig(): void
@@ -133,6 +134,7 @@ class ProductBadges extends Module
         Configuration::deleteByName('PRODUCTBADGES_SHOW_LISTING');
         Configuration::deleteByName('PRODUCTBADGES_SHOW_PRODUCT');
         Configuration::deleteByName('PRODUCTBADGES_MAX_BADGES');
+        Configuration::deleteByName('PRODUCTBADGES_HIDE_FLAGS');
     }
 
     // ─── Back-office config page ─────────────────────────────────────────────
@@ -155,10 +157,11 @@ class ProductBadges extends Module
 
     private function saveConfig(): string
     {
-        $enabled     = (int) Tools::getValue('PRODUCTBADGES_ENABLED');
-        $showListing = (int) Tools::getValue('PRODUCTBADGES_SHOW_LISTING');
-        $showProduct = (int) Tools::getValue('PRODUCTBADGES_SHOW_PRODUCT');
-        $maxBadges   = (int) Tools::getValue('PRODUCTBADGES_MAX_BADGES');
+        $enabled          = (int) Tools::getValue('PRODUCTBADGES_ENABLED');
+        $showListing      = (int) Tools::getValue('PRODUCTBADGES_SHOW_LISTING');
+        $showProduct      = (int) Tools::getValue('PRODUCTBADGES_SHOW_PRODUCT');
+        $maxBadges        = (int) Tools::getValue('PRODUCTBADGES_MAX_BADGES');
+        $hideDefaultFlags = (int) Tools::getValue('PRODUCTBADGES_HIDE_FLAGS');
 
         if ($maxBadges < 0 || $maxBadges > 20) {
             return $this->displayError($this->l('Max badges must be between 0 and 20.'));
@@ -168,6 +171,7 @@ class ProductBadges extends Module
         Configuration::updateValue('PRODUCTBADGES_SHOW_LISTING', $showListing ? 1 : 0);
         Configuration::updateValue('PRODUCTBADGES_SHOW_PRODUCT', $showProduct ? 1 : 0);
         Configuration::updateValue('PRODUCTBADGES_MAX_BADGES', $maxBadges);
+        Configuration::updateValue('PRODUCTBADGES_HIDE_FLAGS', $hideDefaultFlags ? 1 : 0);
 
         return $this->displayConfirmation($this->l('Settings saved.'));
     }
@@ -206,6 +210,13 @@ class ProductBadges extends Module
                         'class'    => 'fixed-width-sm',
                         'desc'     => $this->l('Set 0 for unlimited.'),
                     ],
+                    [
+                        'type'   => 'switch',
+                        'label'  => $this->l('Hide default theme badges (New, Sale, etc.)'),
+                        'name'   => 'PRODUCTBADGES_HIDE_FLAGS',
+                        'desc'   => $this->l('Hides .product-flags elements added by the theme.'),
+                        'values' => $this->getSwitchValues('PRODUCTBADGES_HIDE_FLAGS'),
+                    ],
                 ],
                 'submit' => [
                     'title' => $this->l('Save'),
@@ -227,6 +238,7 @@ class ProductBadges extends Module
         $helper->fields_value['PRODUCTBADGES_SHOW_LISTING'] = (int) Configuration::get('PRODUCTBADGES_SHOW_LISTING');
         $helper->fields_value['PRODUCTBADGES_SHOW_PRODUCT'] = (int) Configuration::get('PRODUCTBADGES_SHOW_PRODUCT');
         $helper->fields_value['PRODUCTBADGES_MAX_BADGES']   = (int) Configuration::get('PRODUCTBADGES_MAX_BADGES');
+        $helper->fields_value['PRODUCTBADGES_HIDE_FLAGS']   = (int) Configuration::get('PRODUCTBADGES_HIDE_FLAGS');
 
         return $helper->generateForm([$fields]);
     }
@@ -254,10 +266,16 @@ class ProductBadges extends Module
         $assignments = ProductBadge::getAllAssignments($idLang);
         $maxBadges   = (int) Configuration::get('PRODUCTBADGES_MAX_BADGES');
 
-        return '<div id="productbadges-data"'
+        $output = '<div id="productbadges-data"'
             . ' data-badges="' . htmlspecialchars(json_encode($assignments), ENT_QUOTES, 'UTF-8') . '"'
             . ' data-max="' . (int) $maxBadges . '"'
             . ' style="display:none"></div>';
+
+        if ((int) Configuration::get('PRODUCTBADGES_HIDE_FLAGS')) {
+            $output .= '<style>.product-flags{display:none!important}</style>';
+        }
+
+        return $output;
     }
 
     public function hookActionAdminControllerSetMedia(): void
