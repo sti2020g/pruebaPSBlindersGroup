@@ -12,7 +12,6 @@ $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'product_badge` (
     `text_color` varchar(7) NOT NULL DEFAULT \'#ffffff\',
     `position` enum(\'top-left\',\'top-right\') NOT NULL DEFAULT \'top-left\',
     `sort_order` tinyint(3) unsigned NOT NULL DEFAULT 0,
-    `all_products` tinyint(1) unsigned NOT NULL DEFAULT 0,
     `active` tinyint(1) unsigned NOT NULL DEFAULT 1,
     `date_add` datetime NOT NULL,
     `date_upd` datetime NOT NULL,
@@ -26,10 +25,13 @@ $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'product_badge_lang` (
     PRIMARY KEY (`id_product_badge`, `id_lang`)
 ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
 
+// id_shop = 0  → visible in ALL shops (default / no multistore)
+// id_shop = N  → visible only in shop N
 $sql[] = 'CREATE TABLE IF NOT EXISTS `' . _DB_PREFIX_ . 'product_badge_product` (
     `id_product_badge` int(10) unsigned NOT NULL,
     `id_product` int(10) unsigned NOT NULL,
-    PRIMARY KEY (`id_product_badge`, `id_product`)
+    `id_shop` int(10) unsigned NOT NULL DEFAULT 0,
+    PRIMARY KEY (`id_product_badge`, `id_product`, `id_shop`)
 ) ENGINE=' . _MYSQL_ENGINE_ . ' DEFAULT CHARSET=utf8mb4;';
 
 foreach ($sql as $query) {

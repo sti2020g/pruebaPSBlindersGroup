@@ -60,9 +60,11 @@ class ProductBadge extends ObjectModel
         $idProduct   = (int) $idProduct;
         $idLang      = (int) $idLang;
         $defaultLang = (int) Configuration::get('PS_LANG_DEFAULT');
+        $idShop      = (int) Context::getContext()->shop->id;
 
         $limit = $maxBadges > 0 ? 'LIMIT ' . (int) $maxBadges : '';
 
+        // id_shop = 0 → global (all shops); id_shop = N → specific shop only
         $query = '
             SELECT b.`id_product_badge`, b.`bg_color`, b.`text_color`, b.`position`, b.`sort_order`,
                    COALESCE(bl.`label`, bl_def.`label`, \'\') AS `label`
@@ -70,6 +72,7 @@ class ProductBadge extends ObjectModel
             INNER JOIN `' . _DB_PREFIX_ . 'product_badge_product` bp
                 ON bp.`id_product_badge` = b.`id_product_badge`
                 AND bp.`id_product` = ' . $idProduct . '
+                AND (bp.`id_shop` = 0 OR bp.`id_shop` = ' . $idShop . ')
             LEFT JOIN `' . _DB_PREFIX_ . 'product_badge_lang` bl
                 ON bl.`id_product_badge` = b.`id_product_badge`
                 AND bl.`id_lang` = ' . $idLang . '
@@ -94,7 +97,9 @@ class ProductBadge extends ObjectModel
     {
         $idLang      = (int) $idLang;
         $defaultLang = (int) Configuration::get('PS_LANG_DEFAULT');
+        $idShop      = (int) Context::getContext()->shop->id;
 
+        // id_shop = 0 → global (all shops); id_shop = N → specific shop only
         $query = '
             SELECT bp.`id_product`,
                    b.`bg_color`, b.`text_color`, b.`position`, b.`sort_order`,
@@ -102,6 +107,7 @@ class ProductBadge extends ObjectModel
             FROM `' . _DB_PREFIX_ . 'product_badge` b
             INNER JOIN `' . _DB_PREFIX_ . 'product_badge_product` bp
                 ON bp.`id_product_badge` = b.`id_product_badge`
+                AND (bp.`id_shop` = 0 OR bp.`id_shop` = ' . $idShop . ')
             LEFT JOIN `' . _DB_PREFIX_ . 'product_badge_lang` bl
                 ON bl.`id_product_badge` = b.`id_product_badge`
                 AND bl.`id_lang` = ' . $idLang . '
@@ -158,7 +164,19 @@ class ProductBadge extends ObjectModel
     {
         $idBadge = (int) $this->id;
 
-        Db::getInstance()->delete('product_badge_product', 'id_product_badge = ' . $idBadge);
+        // In multistore: assignments are shop-specific.
+        // Without multistore (or when saving as global): id_shop = 0 (all shops).
+        $idShop = Shop::isFeatureActive() ? (int) Context::getContext()->shop->id : 0;
+
+        // Delete existing assignments for this badge + shop scope only
+        if ($idShop === 0) {
+            Db::getInstance()->delete('product_badge_product', 'id_product_badge = ' . $idBadge . ' AND id_shop = 0');
+        } else {
+            Db::getInstance()->delete(
+                'product_badge_product',
+                'id_product_badge = ' . $idBadge . ' AND id_shop = ' . $idShop
+            );
+        }
 
         foreach ($productIds as $idProduct) {
             $idProduct = (int) $idProduct;
@@ -177,6 +195,7 @@ class ProductBadge extends ObjectModel
             Db::getInstance()->insert('product_badge_product', [
                 'id_product_badge' => $idBadge,
                 'id_product'       => $idProduct,
+                'id_shop'          => $idShop,
             ]);
         }
 

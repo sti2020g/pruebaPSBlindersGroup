@@ -121,11 +121,13 @@ class ProductBadges extends Module
 
     private function setDefaultConfig(): void
     {
-        Configuration::updateValue('PRODUCTBADGES_ENABLED', 1);
-        Configuration::updateValue('PRODUCTBADGES_SHOW_LISTING', 1);
-        Configuration::updateValue('PRODUCTBADGES_SHOW_PRODUCT', 1);
-        Configuration::updateValue('PRODUCTBADGES_MAX_BADGES', 3);
-        Configuration::updateValue('PRODUCTBADGES_HIDE_FLAGS', 1);
+        $idShop = Shop::isFeatureActive() ? (int) $this->context->shop->id : null;
+
+        Configuration::updateValue('PRODUCTBADGES_ENABLED', 1, false, null, $idShop);
+        Configuration::updateValue('PRODUCTBADGES_SHOW_LISTING', 1, false, null, $idShop);
+        Configuration::updateValue('PRODUCTBADGES_SHOW_PRODUCT', 1, false, null, $idShop);
+        Configuration::updateValue('PRODUCTBADGES_MAX_BADGES', 3, false, null, $idShop);
+        Configuration::updateValue('PRODUCTBADGES_HIDE_FLAGS', 1, false, null, $idShop);
     }
 
     private function deleteConfig(): void
@@ -135,6 +137,15 @@ class ProductBadges extends Module
         Configuration::deleteByName('PRODUCTBADGES_SHOW_PRODUCT');
         Configuration::deleteByName('PRODUCTBADGES_MAX_BADGES');
         Configuration::deleteByName('PRODUCTBADGES_HIDE_FLAGS');
+    }
+
+    /**
+     * Returns shop ID when multistore is active, null otherwise.
+     * Using null makes Configuration fall back to global scope (retro-compat).
+     */
+    private function getShopId(): ?int
+    {
+        return Shop::isFeatureActive() ? (int) $this->context->shop->id : null;
     }
 
     // ─── Back-office config page ─────────────────────────────────────────────
@@ -167,11 +178,13 @@ class ProductBadges extends Module
             return $this->displayError($this->l('Max badges must be between 0 and 20.'));
         }
 
-        Configuration::updateValue('PRODUCTBADGES_ENABLED', $enabled ? 1 : 0);
-        Configuration::updateValue('PRODUCTBADGES_SHOW_LISTING', $showListing ? 1 : 0);
-        Configuration::updateValue('PRODUCTBADGES_SHOW_PRODUCT', $showProduct ? 1 : 0);
-        Configuration::updateValue('PRODUCTBADGES_MAX_BADGES', $maxBadges);
-        Configuration::updateValue('PRODUCTBADGES_HIDE_FLAGS', $hideDefaultFlags ? 1 : 0);
+        $idShop = $this->getShopId();
+
+        Configuration::updateValue('PRODUCTBADGES_ENABLED', $enabled ? 1 : 0, false, null, $idShop);
+        Configuration::updateValue('PRODUCTBADGES_SHOW_LISTING', $showListing ? 1 : 0, false, null, $idShop);
+        Configuration::updateValue('PRODUCTBADGES_SHOW_PRODUCT', $showProduct ? 1 : 0, false, null, $idShop);
+        Configuration::updateValue('PRODUCTBADGES_MAX_BADGES', $maxBadges, false, null, $idShop);
+        Configuration::updateValue('PRODUCTBADGES_HIDE_FLAGS', $hideDefaultFlags ? 1 : 0, false, null, $idShop);
 
         return $this->displayConfirmation($this->l('Settings saved.'));
     }
@@ -234,11 +247,13 @@ class ProductBadges extends Module
         $helper->show_toolbar             = false;
         $helper->submit_action            = 'submitProductBadgesConfig';
 
-        $helper->fields_value['PRODUCTBADGES_ENABLED']      = (int) Configuration::get('PRODUCTBADGES_ENABLED');
-        $helper->fields_value['PRODUCTBADGES_SHOW_LISTING'] = (int) Configuration::get('PRODUCTBADGES_SHOW_LISTING');
-        $helper->fields_value['PRODUCTBADGES_SHOW_PRODUCT'] = (int) Configuration::get('PRODUCTBADGES_SHOW_PRODUCT');
-        $helper->fields_value['PRODUCTBADGES_MAX_BADGES']   = (int) Configuration::get('PRODUCTBADGES_MAX_BADGES');
-        $helper->fields_value['PRODUCTBADGES_HIDE_FLAGS']   = (int) Configuration::get('PRODUCTBADGES_HIDE_FLAGS');
+        $idShop = $this->getShopId();
+
+        $helper->fields_value['PRODUCTBADGES_ENABLED']      = (int) Configuration::get('PRODUCTBADGES_ENABLED', null, null, $idShop);
+        $helper->fields_value['PRODUCTBADGES_SHOW_LISTING'] = (int) Configuration::get('PRODUCTBADGES_SHOW_LISTING', null, null, $idShop);
+        $helper->fields_value['PRODUCTBADGES_SHOW_PRODUCT'] = (int) Configuration::get('PRODUCTBADGES_SHOW_PRODUCT', null, null, $idShop);
+        $helper->fields_value['PRODUCTBADGES_MAX_BADGES']   = (int) Configuration::get('PRODUCTBADGES_MAX_BADGES', null, null, $idShop);
+        $helper->fields_value['PRODUCTBADGES_HIDE_FLAGS']   = (int) Configuration::get('PRODUCTBADGES_HIDE_FLAGS', null, null, $idShop);
 
         return $helper->generateForm([$fields]);
     }
@@ -255,7 +270,9 @@ class ProductBadges extends Module
 
     public function hookDisplayHeader(): string
     {
-        if (!(int) Configuration::get('PRODUCTBADGES_ENABLED')) {
+        $idShop = $this->getShopId();
+
+        if (!(int) Configuration::get('PRODUCTBADGES_ENABLED', null, null, $idShop)) {
             return '';
         }
 
@@ -264,14 +281,14 @@ class ProductBadges extends Module
 
         $idLang      = (int) $this->context->language->id;
         $assignments = ProductBadge::getAllAssignments($idLang);
-        $maxBadges   = (int) Configuration::get('PRODUCTBADGES_MAX_BADGES');
+        $maxBadges   = (int) Configuration::get('PRODUCTBADGES_MAX_BADGES', null, null, $idShop);
 
         $output = '<div id="productbadges-data"'
             . ' data-badges="' . htmlspecialchars(json_encode($assignments), ENT_QUOTES, 'UTF-8') . '"'
             . ' data-max="' . (int) $maxBadges . '"'
             . ' style="display:none"></div>';
 
-        if ((int) Configuration::get('PRODUCTBADGES_HIDE_FLAGS')) {
+        if ((int) Configuration::get('PRODUCTBADGES_HIDE_FLAGS', null, null, $idShop)) {
             $output .= '<style>.product-flags{display:none!important}</style>';
         }
 
@@ -286,11 +303,13 @@ class ProductBadges extends Module
 
     public function hookDisplayProductListItem(array $params): string
     {
-        if (!(int) Configuration::get('PRODUCTBADGES_ENABLED')) {
+        $idShop = $this->getShopId();
+
+        if (!(int) Configuration::get('PRODUCTBADGES_ENABLED', null, null, $idShop)) {
             return '';
         }
 
-        if (!(int) Configuration::get('PRODUCTBADGES_SHOW_LISTING')) {
+        if (!(int) Configuration::get('PRODUCTBADGES_SHOW_LISTING', null, null, $idShop)) {
             return '';
         }
 
@@ -303,11 +322,13 @@ class ProductBadges extends Module
 
     public function hookDisplayProductAdditionalInfo(array $params): string
     {
-        if (!(int) Configuration::get('PRODUCTBADGES_ENABLED')) {
+        $idShop = $this->getShopId();
+
+        if (!(int) Configuration::get('PRODUCTBADGES_ENABLED', null, null, $idShop)) {
             return '';
         }
 
-        if (!(int) Configuration::get('PRODUCTBADGES_SHOW_PRODUCT')) {
+        if (!(int) Configuration::get('PRODUCTBADGES_SHOW_PRODUCT', null, null, $idShop)) {
             return '';
         }
 
@@ -324,7 +345,8 @@ class ProductBadges extends Module
             return '';
         }
 
-        $maxBadges = (int) Configuration::get('PRODUCTBADGES_MAX_BADGES');
+        $idShop    = $this->getShopId();
+        $maxBadges = (int) Configuration::get('PRODUCTBADGES_MAX_BADGES', null, null, $idShop);
         $idLang    = (int) $this->context->language->id;
         $badges    = ProductBadge::getByProduct($idProduct, $idLang, $maxBadges);
 
