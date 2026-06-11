@@ -135,48 +135,102 @@ class ProductBadge extends ObjectModel
     }
 
     /**
-     * Get product IDs assigned to this badge.
+     * Return distinct shop IDs that have at least one product assigned to this badge.
+     * Used by the edit form to auto-select the correct shop on first load.
+     *
+     * @return array  e.g. [0, 2] — 0 = "all shops" scope
+     */
+    public function getAssignedShopIds(): array
+    {
+        $rows = Db::getInstance()->executeS(
+            'SELECT DISTINCT `id_shop` FROM `' . _DB_PREFIX_ . 'product_badge_product`
+             WHERE `id_product_badge` = ' . (int) $this->id . '
+             ORDER BY `id_shop` ASC'
+        );
+
+        return $rows ? array_map('intval', array_column($rows, 'id_shop')) : [];
+    }
+
+    /**
+     * Get product IDs assigned to this badge for a specific shop.
+     * Exact match on id_shop — does NOT include id_shop = 0 globally.
+     *
+     * @param int $idShop  0 = "all shops" scope; >0 = specific shop
+     * @return array
+     */
+    public function getAssignedProductsByShop(int $idShop): array
+    {
+        $rows = Db::getInstance()->executeS(
+            'SELECT `id_product` FROM `' . _DB_PREFIX_ . 'product_badge_product`
+             WHERE `id_product_badge` = ' . (int) $this->id . '
+             AND `id_shop` = ' . (int) $idShop
+        );
+
+        return $rows ? array_column($rows, 'id_product') : [];
+    }
+
+    /**
+     * Backward-compatible wrapper — uses current shop context.
      *
      * @return array
      */
     public function getAssignedProducts(): array
     {
-        $rows = Db::getInstance()->executeS(
-            'SELECT id_product FROM `' . _DB_PREFIX_ . 'product_badge_product`
-             WHERE id_product_badge = ' . (int) $this->id
-        );
+        $idShop = Shop::isFeatureActive() ? (int) Context::getContext()->shop->id : 0;
 
-        if (!$rows) {
-            return [];
-        }
-
-        return array_column($rows, 'id_product');
+        return $this->getAssignedProductsByShop($idShop);
     }
 
     /**
-     * Save many-to-many product assignments.
-     * Validates each product ID before inserting.
+     * HTML snippet listing shops + product counts for the back-office list.
+     *
+     * @param int $idBadge
+     * @return string
+     */
+    public static function getShopsSummaryForList(int $idBadge): string
+    {
+        $rows = Db::getInstance()->executeS(
+            'SELECT bp.`id_shop`,
+                    COUNT(bp.`id_product`) AS `cnt`,
+                    IF(bp.`id_shop` = 0, \'(global)\', s.`name`) AS `shop_name`
+             FROM `' . _DB_PREFIX_ . 'product_badge_product` bp
+             LEFT JOIN `' . _DB_PREFIX_ . 'shop` s ON s.`id_shop` = bp.`id_shop`
+             WHERE bp.`id_product_badge` = ' . (int) $idBadge . '
+             GROUP BY bp.`id_shop`
+             ORDER BY bp.`id_shop` ASC'
+        );
+
+        if (!$rows) {
+            return '—';
+        }
+
+        $parts = [];
+        foreach ($rows as $row) {
+            $name    = htmlspecialchars($row['shop_name'], ENT_QUOTES, 'UTF-8');
+            $cnt     = (int) $row['cnt'];
+            $parts[] = $name . ' <span class="badge">' . $cnt . '</span>';
+        }
+
+        return implode('<br>', $parts);
+    }
+
+    /**
+     * Save many-to-many product assignments for an explicit shop scope.
      *
      * @param array $productIds
+     * @param int   $idShop  0 = all shops (no multistore); >0 = specific shop
      * @return bool
      */
-    public function saveProductAssignments(array $productIds): bool
+    public function saveProductAssignments(array $productIds, int $idShop = 0): bool
     {
         $idBadge = (int) $this->id;
+        $idShop  = (int) $idShop;
 
-        // In multistore: assignments are shop-specific.
-        // Without multistore (or when saving as global): id_shop = 0 (all shops).
-        $idShop = Shop::isFeatureActive() ? (int) Context::getContext()->shop->id : 0;
-
-        // Delete existing assignments for this badge + shop scope only
-        if ($idShop === 0) {
-            Db::getInstance()->delete('product_badge_product', 'id_product_badge = ' . $idBadge . ' AND id_shop = 0');
-        } else {
-            Db::getInstance()->delete(
-                'product_badge_product',
-                'id_product_badge = ' . $idBadge . ' AND id_shop = ' . $idShop
-            );
-        }
+        // Delete existing assignments for this badge + this shop scope only
+        Db::getInstance()->delete(
+            'product_badge_product',
+            'id_product_badge = ' . $idBadge . ' AND id_shop = ' . $idShop
+        );
 
         foreach ($productIds as $idProduct) {
             $idProduct = (int) $idProduct;

@@ -7,6 +7,46 @@
     <input type="hidden" name="{$token_name|escape:'html':'UTF-8'}" value="{$token_value|escape:'html':'UTF-8'}">
     <input type="hidden" name="submitAddproduct_badge" value="1">
 
+    {* ── Shop selector (multistore only) ─────────────────────────────────── *}
+    {if $multistore_active && $shops|@count > 1}
+    <div class="panel" style="margin-bottom:16px;">
+        <div class="panel-heading">
+            <i class="icon-home"></i> {l s='Select Store' mod='productbadges'}
+        </div>
+        <div class="form-group" style="padding:12px 0 0;">
+            <label class="control-label col-lg-3">
+                {l s='Manage badges:' mod='productbadges'}
+            </label>
+            <div class="col-lg-5">
+                <select id="pb_shop_selector" class="form-control">
+                    {foreach from=$shops item=shop}
+                    <option value="{$shop.id_shop|intval}"
+                        {if $shop.id_shop == $selected_shop_id} selected{/if}>
+                        {$shop.name|escape:'html':'UTF-8'}
+                    </option>
+                    {/foreach}
+                </select>
+                <p class="help-block">
+                    {l s='Product list and assignments below are specific to this shop.' mod='productbadges'}
+                </p>
+            </div>
+        </div>
+    </div>
+    <input type="hidden" name="id_shop" value="{$selected_shop_id|intval}">
+    <script>
+    (function () {
+        var sel = document.getElementById('pb_shop_selector');
+        if (!sel) { return; }
+        sel.addEventListener('change', function () {
+            window.location.href = '{$reload_url|escape:'javascript':'UTF-8'}' +
+                '&id_shop=' + encodeURIComponent(this.value);
+        });
+    }());
+    </script>
+    {else}
+    <input type="hidden" name="id_shop" value="{$selected_shop_id|intval}">
+    {/if}
+
     <div class="panel">
         <div class="panel-heading">
             <i class="icon-tag"></i>

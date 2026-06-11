@@ -4,7 +4,7 @@ if (!defined('_PS_VERSION_')) {
     exit;
 }
 
-require_once _PS_MODULE_DIR_ . 'productbadges/classes/ProductBadge.php';
+require_once _PS_MODULE_DIR_ . 'productbadges/classes/ProductBadgeMultiStorev1.php';
 
 class AdminProductBadgesController extends ModuleAdminController
 {
@@ -54,6 +54,38 @@ class AdminProductBadgesController extends ModuleAdminController
                 'orderby' => false,
             ],
         ];
+
+        if (Shop::isFeatureActive()) {
+            $this->fields_list['shops_display'] = [
+                'title'    => $this->l('Shops'),
+                'callback' => 'renderShopsDisplay',
+                'search'   => false,
+                'orderby'  => false,
+            ];
+        }
+    }
+
+    /**
+     * Render shops summary HTML for HelperList.
+     */
+    public function renderShopsDisplay(string $v): string
+    {
+        return $v ?: '—';
+    }
+
+    /**
+     * Override getList to inject shops_display into each row after the query.
+     */
+    public function getList($id_lang, $order_by = null, $order_way = null, $start = 0, $limit = null, $id_lang_shop = false)
+    {
+        parent::getList($id_lang, $order_by, $order_way, $start, $limit, $id_lang_shop);
+
+        if (Shop::isFeatureActive() && !empty($this->_list)) {
+            foreach ($this->_list as &$row) {
+                $row['shops_display'] = ProductBadge::getShopsSummaryForList((int) $row['id_product_badge']);
+            }
+            unset($row);
+        }
     }
 
     /**
@@ -72,11 +104,51 @@ class AdminProductBadgesController extends ModuleAdminController
 
     public function renderForm(): string
     {
-        $idLang    = (int) $this->context->language->id;
-        $languages = Language::getLanguages(false);
-        $idShop    = (int) $this->context->shop->id;
-        if ($idShop <= 0) {
-            $idShop = (int) Configuration::get('PS_SHOP_DEFAULT');
+        $idLang           = (int) $this->context->language->id;
+        $languages        = Language::getLanguages(false);
+        $multistoreActive = Shop::isFeatureActive();
+
+        // Build validated shop list
+        $shops        = $multistoreActive ? Shop::getShops(true) : [];
+        $validShopIds = array_map('intval', array_column($shops, 'id_shop'));
+
+        // Resolve selected shop:
+        //  1. Explicit id_shop in URL (user changed shop via selector)
+        //  2. When editing: first shop that already has assignments (avoids duplicate on wrong shop)
+        //  3. Fallback: first available shop / context shop
+        $shopFromUrl    = (int) Tools::getValue('id_shop', 0);
+        $selectedShopId = 0;
+
+        if ($shopFromUrl > 0 && in_array($shopFromUrl, $validShopIds)) {
+            // User explicitly chose a shop via the dropdown redirect
+            $selectedShopId = $shopFromUrl;
+        } elseif ($this->object && $this->object->id) {
+            // Editing an existing badge: detect shop from existing assignments
+            /** @var ProductBadge $editObj */
+            $editObj = $this->object;
+            foreach ($editObj->getAssignedShopIds() as $sid) {
+                if ($sid > 0 && in_array($sid, $validShopIds)) {
+                    $selectedShopId = $sid;
+                    break;
+                }
+            }
+        }
+
+        // Final fallback: first valid shop
+        if ($selectedShopId <= 0) {
+            $selectedShopId = !empty($validShopIds)
+                ? $validShopIds[0]
+                : (int) Configuration::get('PS_SHOP_DEFAULT');
+        }
+
+        $idShop = $selectedShopId;
+
+        // Reload URL used by JS shop-change redirect
+        $reloadBase = $this->context->link->getAdminLink('AdminProductBadges');
+        if ($this->object && $this->object->id) {
+            $reloadBase .= '&updateproduct_badge&id_product_badge=' . (int) $this->object->id;
+        } else {
+            $reloadBase .= '&addproduct_badge';
         }
 
         $assigned = [];
@@ -93,7 +165,7 @@ class AdminProductBadgesController extends ModuleAdminController
         if ($this->object && $this->object->id) {
             /** @var ProductBadge $obj */
             $obj              = $this->object;
-            $assigned         = $obj->getAssignedProducts();
+            $assigned         = $obj->getAssignedProductsByShop($selectedShopId);
             $badge['id_product_badge'] = (int) $obj->id;
             $badge['bg_color']   = $obj->bg_color;
             $badge['text_color'] = $obj->text_color;
@@ -114,19 +186,23 @@ class AdminProductBadgesController extends ModuleAdminController
         $products = $this->getAllProducts($idLang, $idShop);
 
         $this->context->smarty->assign([
-            'badge'        => $badge,
-            'languages'    => $languages,
-            'default_lang' => (int) Configuration::get('PS_LANG_DEFAULT'),
-            'products'     => $products,
-            'assigned_ids' => $assigned,
-            'form_action'  => $this->context->link->getAdminLink('AdminProductBadges'),
-            'cancel_url'   => $this->context->link->getAdminLink('AdminProductBadges'),
-            'token_name'   => 'token',
-            'token_value'  => Tools::getAdminTokenLite('AdminProductBadges'),
+            'badge'              => $badge,
+            'languages'          => $languages,
+            'default_lang'       => (int) Configuration::get('PS_LANG_DEFAULT'),
+            'products'           => $products,
+            'assigned_ids'       => $assigned,
+            'form_action'        => $this->context->link->getAdminLink('AdminProductBadges'),
+            'cancel_url'         => $this->context->link->getAdminLink('AdminProductBadges'),
+            'token_name'         => 'token',
+            'token_value'        => Tools::getAdminTokenLite('AdminProductBadges'),
+            'multistore_active'  => $multistoreActive,
+            'shops'              => $shops,
+            'selected_shop_id'   => $selectedShopId,
+            'reload_url'         => $reloadBase,
         ]);
 
         return $this->context->smarty->fetch(
-            _PS_MODULE_DIR_ . 'productbadges/views/templates/admin/badge_form.tpl'
+            _PS_MODULE_DIR_ . 'productbadges/views/templates/admin/badge_formMultiStorev1.tpl'
         );
     }
 
@@ -140,8 +216,10 @@ class AdminProductBadgesController extends ModuleAdminController
         $sql = new DbQuery();
         $sql->select('p.id_product, pl.name');
         $sql->from('product', 'p');
+        // product_lang PK in PS 1.7 is (id_product, id_shop, id_lang) — must filter
+        // by id_shop to avoid one row per shop (= all products from all shops appearing).
         $sql->innerJoin('product_lang', 'pl',
-            'pl.id_product = p.id_product AND pl.id_lang = ' . $idLang
+            'pl.id_product = p.id_product AND pl.id_lang = ' . $idLang . ' AND pl.id_shop = ' . $idShop
         );
         // active flag lives in product_shop in PS 1.7
         $sql->innerJoin('product_shop', 'ps',
@@ -217,6 +295,18 @@ class AdminProductBadgesController extends ModuleAdminController
             return;
         }
 
+        // ── Determine shop scope ─────────────────────────────────────────────
+        if (Shop::isFeatureActive()) {
+            $shops        = Shop::getShops(true);
+            $validShopIds = array_column($shops, 'id_shop');
+            $idShop       = (int) Tools::getValue('id_shop', $this->context->shop->id);
+            if (!in_array($idShop, $validShopIds)) {
+                $idShop = (int) $this->context->shop->id;
+            }
+        } else {
+            $idShop = 0;
+        }
+
         // ── Save object ──────────────────────────────────────────────────────
         $idBadge = (int) Tools::getValue('id_product_badge');
         $badge   = $idBadge ? new ProductBadge($idBadge) : new ProductBadge();
@@ -236,7 +326,7 @@ class AdminProductBadgesController extends ModuleAdminController
             // ── Save product assignments ─────────────────────────────────────
             $rawIds     = Tools::getValue('product_ids', []);
             $productIds = $this->parseProductIds($rawIds);
-            $badge->saveProductAssignments($productIds);
+            $badge->saveProductAssignments($productIds, $idShop);
 
             $this->confirmations[] = $this->l('Badge saved.');
 
